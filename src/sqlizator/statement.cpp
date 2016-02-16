@@ -87,8 +87,9 @@ Statement::Statement(sqlite3* db,
             std::string key(p_mo.key.via.str.ptr, p_mo.key.via.str.size);
             unpacked.insert(std::make_pair(key, p_mo.val));
         }
-        for (uint64_t i = 1; i < param_count; i++) {
-            std::string binding_name(sqlite3_bind_parameter_name(statement_, i));
+        for (uint64_t i = 0; i < param_count; i++) {
+            std::string binding_name(sqlite3_bind_parameter_name(statement_, i + 1));
+            binding_name.erase(0, 1);  // remove first `:` character
             msgpack::object obj;
             try {
                 obj = unpacked.at(binding_name);
@@ -96,7 +97,7 @@ Statement::Statement(sqlite3* db,
                 throw sqlite_error("Binding parameters to statement failed. "
                                    "Missing key: " + binding_name);
             }
-            int rc = bind_param(obj, i);
+            int rc = bind_param(obj, i + 1);
             if (rc != SQLITE_OK)
                 throw sqlite_error(sqlite3_errstr(rc));
         }
