@@ -23,7 +23,7 @@ Database::~Database() {
 
 void Database::query(Operation operation,
                      const std::string& query,
-                     const msgpack::object& parameters,
+                     const msgpack::object_handle& parameters,
                      Packer* into) {
     Statement stmt(db_, query, parameters);
     bool collect_result = (operation == Operation::EXECUTE_AND_FETCH);

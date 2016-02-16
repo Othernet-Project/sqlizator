@@ -21,7 +21,7 @@ struct MsgType {
     std::string database;
     std::string query;
     Operation operation;
-    msgpack::object parameters;
+    msgpack::object_handle parameters;
 };
 
 class DBServer: public tcpserver::Server {
@@ -79,7 +79,7 @@ struct convert<sqlizator::MsgType> {
                 if (p_mo->val.type != msgpack::type::ARRAY &&
                         p_mo->val.type != msgpack::type::MAP)
                     throw msgpack::type_error();
-                v.parameters = p_mo->val;
+                v.parameters = msgpack::clone(p_mo->val);
             }
         }
         return o;

@@ -25,7 +25,7 @@ class Statement {
  public:
     explicit Statement(sqlite3* db,
                        const std::string& query,
-                       const msgpack::object& parameters);
+                       const msgpack::object_handle& parameters);
     ~Statement();
     uint64_t execute(Packer* packer, bool collect_result);
 };

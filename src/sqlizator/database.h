@@ -28,7 +28,7 @@ class Database {
     void connect();
     void query(Operation operation,
                const std::string& query,
-               const msgpack::object& parameters,
+               const msgpack::object_handle& parameters,
                Packer* into);
 };
 

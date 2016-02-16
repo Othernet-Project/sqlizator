@@ -58,8 +58,10 @@ int Statement::bind_param(const msgpack::object& v, int pos) {
 
 Statement::Statement(sqlite3* db,
                      const std::string& query,
-                     const msgpack::object& parameters): db_(db),
-                                                         statement_(NULL) {
+                     const msgpack::object_handle& parameters):
+                                                            db_(db),
+                                                            statement_(NULL) {
+    msgpack::object obj(parameters.get());
     int ret = sqlite3_prepare_v2(db_,
                                  query.data(),
                                  static_cast<int>(query.size()),
@@ -69,19 +71,19 @@ Statement::Statement(sqlite3* db,
         throw sqlite_error(sqlite3_errstr(ret));
 
     uint64_t param_count = sqlite3_bind_parameter_count(statement_);
-    if (parameters.type == msgpack::type::ARRAY) {
-        if (parameters.via.array.size != param_count)
+    if (obj.type == msgpack::type::ARRAY) {
+        if (obj.via.array.size != param_count)
             throw sqlite_error("Number of passed parameters does not match "
                                "number of required parameters.");
         for (uint64_t i = 0; i < param_count; i++) {
-            int rc = bind_param(parameters.via.array.ptr[i], i + 1);
+            int rc = bind_param(obj.via.array.ptr[i], i + 1);
             if (rc != SQLITE_OK)
                 throw sqlite_error(sqlite3_errstr(rc));
         }
     } else {
         std::map<std::string, msgpack::object> unpacked;
-        for (uint64_t i = 0; i < parameters.via.map.size; i++) {
-            msgpack::object_kv p_mo(parameters.via.map.ptr[i]);
+        for (uint64_t i = 0; i < obj.via.map.size; i++) {
+            msgpack::object_kv p_mo(obj.via.map.ptr[i]);
             std::string key(p_mo.key.via.str.ptr, p_mo.key.via.str.size);
             unpacked.insert(std::make_pair(key, p_mo.val));
         }
