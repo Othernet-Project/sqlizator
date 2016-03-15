@@ -78,6 +78,7 @@ void DBServer::process(const byte_vec& input, Packer* result) {
         add_header(status_codes::INVALID_QUERY, e.what(), result);
         return;
     }
+    add_header(status_codes::OK, response_messages::OK, result);
 }
 
 void DBServer::handle(const byte_vec& input, byte_vec* output) {

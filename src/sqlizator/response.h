@@ -24,6 +24,12 @@ static const int INVALID_QUERY = 5;
 
 }  // namespace status_codes
 
+namespace response_messages {
+
+static const std::string OK("OK");
+
+}  // namespace response_messages
+
 }  // namespace sqlizator
 #endif  // SQLIZATOR_SQLIZATOR_ERROR_CODES_H_
 
