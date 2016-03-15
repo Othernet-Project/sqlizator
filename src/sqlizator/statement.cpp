@@ -108,14 +108,29 @@ Statement::~Statement() {
     sqlite3_finalize(statement_);
 }
 
+void Statement::add_meta_info(Packer* packer) {
+    int col_count = sqlite3_column_count(statement_);
+    if (col_count == 0)
+        return;
+
+    packer->pack_array(col_count);
+    for (int i = 0; i < col_count; ++i) {
+        const char* col_name = sqlite3_column_name(statement_, i);
+        const char* col_type = sqlite3_column_decltype(statement_, i);
+        if (col_type != NULL)
+            packer->pack(std::make_tuple(col_name, col_type));
+        else
+            packer->pack(std::make_tuple(col_name, msgpack::type::nil_t()));
+    }
+}
+
 void Statement::fetch_into(Packer* packer) {
     int col_count = sqlite3_data_count(statement_);
-    packer->pack_map(col_count);
+    packer->pack_array(col_count);
     for (int i = 0; i < col_count; ++i) {
         int col_type = sqlite3_column_type(statement_, i);
-        packer->pack(sqlite3_column_name(statement_, i));
         if (col_type == SQLITE_NULL) {
-            packer->pack(NULL);
+            packer->pack(msgpack::type::nil_t());
         } else if (col_type == SQLITE_INTEGER) {
             packer->pack(sqlite3_column_int64(statement_, i));
         } else if (col_type == SQLITE_FLOAT) {
@@ -135,6 +150,7 @@ void Statement::fetch_into(Packer* packer) {
 
 uint64_t Statement::execute(Packer* packer, bool collect_result) {
     uint64_t row_count = 0;
+    add_meta_info(packer);
     while (true) {
         int ret = sqlite3_step(statement_);
         if (ret == SQLITE_DONE) {

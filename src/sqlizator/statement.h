@@ -21,6 +21,7 @@ class Statement {
     sqlite3_stmt* statement_;
 
     int bind_param(const msgpack::object& v, int pos);
+    void add_meta_info(Packer* packer);
     void fetch_into(Packer* packer);
  public:
     explicit Statement(sqlite3* db,
