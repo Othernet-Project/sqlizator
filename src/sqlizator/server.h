@@ -5,9 +5,9 @@
 #ifndef SQLIZATOR_SQLIZATOR_SERVER_H_
 #define SQLIZATOR_SQLIZATOR_SERVER_H_
 #include <map>
+#include <memory>
 #include <string>
 
-#include "sqlizator/config.h"
 #include "sqlizator/database.h"
 #include "sqlizator/response.h"
 #include "tcpserver/server.h"
@@ -15,7 +15,8 @@
 namespace sqlizator {
 
 using tcpserver::byte_vec;
-typedef std::map<std::string, Database> DBContainer;
+typedef std::map<std::string, std::shared_ptr<Database>> DBContainer;
+typedef std::map<std::string, msgpack::object> RequestData;
 
 struct MsgType {
     std::string database;
@@ -26,17 +27,20 @@ struct MsgType {
 
 class DBServer: public tcpserver::Server {
  private:
-    ConfigReader config_;
+    typedef void (DBServer::*endpoint_fn)(const msgpack::object& request,
+                                          Packer* response);
+    typedef std::map<std::string, endpoint_fn> EndpointMap;
     DBContainer databases_;
+    EndpointMap endpoints_;
 
-    void init_databases();
-    void deserialize(const std::string& src, MsgType* dest);
-    void add_header(int status, const std::string& message, Packer* result);
-    void process(const byte_vec& input, Packer* result);
+    void add_header(int status, const std::string& message, Packer* response);
+    void endpoint_connect(const msgpack::object& request, Packer* response);
+    void endpoint_query(const msgpack::object& request, Packer* response);
+    endpoint_fn identify_endpoint(const msgpack::object& request);
     virtual void handle(const byte_vec& input, byte_vec* output);
 
  public:
-    explicit DBServer(const std::string& conf_path, const std::string& port);
+    explicit DBServer(const std::string& port);
 };
 
 }  // namespace sqlizator
@@ -51,9 +55,6 @@ struct convert<sqlizator::MsgType> {
     msgpack::object const& operator()(msgpack::object const& o,
                                       sqlizator::MsgType& v) const {
         if (o.type != msgpack::type::MAP)
-            throw msgpack::type_error();
-
-        if (o.via.map.size != 4)
             throw msgpack::type_error();
 
         msgpack::object_kv* p_mo(o.via.map.ptr);

@@ -15,9 +15,9 @@ class sqlite_error: public std::runtime_error {
                                                 std::runtime_error(message) {}
 };
 
-class deserialization_error: public std::runtime_error {
+class invalid_request: public std::runtime_error {
  public:
-    explicit deserialization_error(const std::string& message):
+    explicit invalid_request(const std::string& message):
                                                 std::runtime_error(message) {}
 };
 

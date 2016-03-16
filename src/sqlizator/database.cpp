@@ -43,4 +43,8 @@ void Database::connect() {
     sqlite3_trace(db_, trace_callback, NULL);
 }
 
+std::string Database::path() {
+    return path_;
+}
+
 }  // namespace sqlizator

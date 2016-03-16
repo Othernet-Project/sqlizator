@@ -4,6 +4,7 @@
 // file that comes with the source code, or http://www.gnu.org/licenses/gpl.txt.
 #include <msgpack.hpp>
 
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -14,77 +15,132 @@
 
 namespace sqlizator {
 
-DBServer::DBServer(const std::string& conf_path,
-                   const std::string& port): tcpserver::Server(port),
-                                             config_(conf_path) {
-    init_databases();
-}
-
-void DBServer::init_databases() {
-    DBConfigMapIterators its(config_.databases());
-    for (auto it = its.first; it != its.second; ++it) {
-        std::string name(it->first);
-        const DBConfig& db_conf = it->second;
-        databases_.insert(std::make_pair(name, Database(db_conf.path)));
-        Database& db = databases_.at(name);
-        db.connect();
-    }
-}
-
-void DBServer::deserialize(const std::string& src, MsgType* dest) {
-    msgpack::unpacked result;
-    msgpack::unpack(result, src.data(), src.size());
-    msgpack::object obj(result.get());
-    try {
-        obj.convert(*dest);
-    } catch (msgpack::type_error& e) {
-        std::string msg("Deserialization failed: " + std::string(e.what()));
-        throw deserialization_error(msg);
-    }
+DBServer::DBServer(const std::string& port): tcpserver::Server(port) {
+    endpoints_.insert(std::make_pair("connect", &DBServer::endpoint_connect));
+    endpoints_.insert(std::make_pair("query", &DBServer::endpoint_query));
 }
 
 void DBServer::add_header(int status,
                           const std::string& message,
-                          Packer* result) {
-    result->pack_map(2);
-    result->pack(std::string("status"));
-    result->pack(status);
-    result->pack(std::string("message"));
-    result->pack(message);
+                          Packer* response) {
+    response->pack_map(2);
+    response->pack(std::string("status"));
+    response->pack(status);
+    response->pack(std::string("message"));
+    response->pack(message);
 }
 
-void DBServer::process(const byte_vec& input, Packer* result) {
-    MsgType msg;
-    std::string str(input.begin(), input.end());
+void DBServer::endpoint_connect(const msgpack::object& request, Packer* response) {
+    std::map<std::string, std::string> msg;
     try {
-        deserialize(str, &msg);
-    } catch (deserialization_error& e) {
+        request.convert(msg);
+    } catch (msgpack::type_error& e) {
         // TODO: log error, message cannot be deserialized
-        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), result);
+        std::string msg("Deserialization failed: " + std::string(e.what()));
+        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), response);
+        return;
+    }
+    std::string name;
+    std::string path;
+    try {
+        name = msg["database"];
+        path = msg["path"];
+    } catch (std::out_of_range& e) {
+        std::string msg("Missing database name or path.");
+        add_header(status_codes::INVALID_REQUEST, msg, response);
+        return;
+    }
+    // create db object only if it's not yet open already
+    if (!databases_.count(name))
+        databases_.insert(std::make_pair(name,
+                                         std::shared_ptr<Database>(new Database(path))));
+
+    Database& db = *databases_.at(name);
+    // in case the database was already open, verify that the passed in path
+    // matches the path of the already open database. in case it doesn't, the
+    // same name was used for two different databases, which is unacceptable
+    if (db.path() != path) {
+        std::string msg("Database name already in use.");
+        add_header(status_codes::INVALID_REQUEST, msg, response);
+        return;
+    }
+    try {
+        db.connect();
+    } catch (sqlite_error& e) {
+        add_header(status_codes::DATABASE_OPENING_ERROR, e.what(), response);
+        return;
+    }
+    add_header(status_codes::OK, response_messages::OK, response);
+}
+
+void DBServer::endpoint_query(const msgpack::object& request, Packer* response) {
+    MsgType msg;
+    try {
+        request.convert(msg);
+    } catch (msgpack::type_error& e) {
+        // TODO: log error, message cannot be deserialized
+        std::string msg("Deserialization failed: " + std::string(e.what()));
+        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), response);
         return;
     }
     Database* db;
     try {
-        db = &(databases_.at(msg.database));
+        db = databases_.at(msg.database).get();
     } catch (std::out_of_range& e) {
         // TODO: log error, invalid database name
-        add_header(status_codes::DATABASE_NOT_FOUND, e.what(), result);
+        add_header(status_codes::DATABASE_NOT_FOUND, e.what(), response);
         return;
     }
     try {
-        db->query(msg.operation, msg.query, msg.parameters, result);
+        db->query(msg.operation, msg.query, msg.parameters, response);
     } catch (sqlite_error& e) {
         // TODO: log error, invalid query
-        add_header(status_codes::INVALID_QUERY, e.what(), result);
+        add_header(status_codes::INVALID_QUERY, e.what(), response);
         return;
     }
-    add_header(status_codes::OK, response_messages::OK, result);
+    add_header(status_codes::OK, response_messages::OK, response);
+}
+
+DBServer::endpoint_fn DBServer::identify_endpoint(const msgpack::object& request) {
+    RequestData data(request.as<RequestData>());
+    msgpack::object endpoint_name;
+    try {
+        endpoint_name = data.at("endpoint");
+    } catch (std::out_of_range& e) {
+        throw invalid_request("Missing endpoint name");
+    }
+    if (endpoint_name.type != msgpack::type::STR)
+        throw invalid_request("Invalid endpoint name");
+
+    DBServer::endpoint_fn endpoint;
+    std::string name(endpoint_name.via.str.ptr, endpoint_name.via.str.size);
+    try {
+        endpoint = endpoints_[name];
+    } catch (std::out_of_range& e) {
+        throw invalid_request("Unknown endpoint specified");
+    }
+    return endpoint;
 }
 
 void DBServer::handle(const byte_vec& input, byte_vec* output) {
+    // unpack incoming data
+    msgpack::unpacked result;
+    std::string str_input(input.begin(), input.end());
+    msgpack::unpack(result, str_input.data(), input.size());
+    msgpack::object request(result.get());
+    // prepare response object
     msgpack::sbuffer buffer;
-    Packer result(&buffer);
-    process(input, &result);
+    Packer response(&buffer);
+    // identify endpoint function based on request data
+    endpoint_fn endpoint;
+    try {
+        endpoint = identify_endpoint(request);
+    } catch (invalid_request& e) {
+        add_header(status_codes::INVALID_REQUEST, e.what(), &response);
+    }
+    // get response from endpoint function
+    (this->*endpoint)(request, &response);
+    // write serialized response data into output buffer
     output->insert(output->end(), buffer.data(), buffer.data() + buffer.size());
 }
 

@@ -30,6 +30,7 @@ class Database {
                const std::string& query,
                const msgpack::object_handle& parameters,
                Packer* into);
+    std::string path();
 };
 
 }  // namespace sqlizator

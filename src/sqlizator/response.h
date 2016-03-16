@@ -17,10 +17,11 @@ namespace status_codes {
 
 static const int OK = 0;
 static const int UNKNOWN_ERROR = 1;
-static const int DESERIALIZATION_ERROR = 2;
-static const int BAD_MESSAGE = 3;
-static const int DATABASE_NOT_FOUND = 4;
-static const int INVALID_QUERY = 5;
+static const int INVALID_REQUEST = 2;
+static const int DESERIALIZATION_ERROR = 3;
+static const int DATABASE_OPENING_ERROR = 4;
+static const int DATABASE_NOT_FOUND = 5;
+static const int INVALID_QUERY = 6;
 
 }  // namespace status_codes
 

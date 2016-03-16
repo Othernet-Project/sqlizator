@@ -10,7 +10,7 @@ CFLAGS += -g -Wall -Wextra -std=c++11
 RM = rm -rf
 
 INC = -I $(SRC_DIR)
-LIB = -lstdc++ -lsqlite3 -lyaml-cpp
+LIB = -lstdc++ -lsqlite3
 SOURCES = $(shell find $(SRC_DIR) -type f -name *.$(SRC_EXT))
 OBJS = $(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%,$(SOURCES:.$(SRC_EXT)=.o))
 
