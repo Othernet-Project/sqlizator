@@ -4,6 +4,7 @@
 // file that comes with the source code, or http://www.gnu.org/licenses/gpl.txt.
 #include <msgpack.hpp>
 
+#include <cstdio>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -17,6 +18,7 @@ namespace sqlizator {
 
 DBServer::DBServer(const std::string& port): tcpserver::Server(port) {
     endpoints_.insert(std::make_pair("connect", &DBServer::endpoint_connect));
+    endpoints_.insert(std::make_pair("drop", &DBServer::endpoint_drop));
     endpoints_.insert(std::make_pair("query", &DBServer::endpoint_query));
 }
 
@@ -70,6 +72,42 @@ void DBServer::endpoint_connect(const msgpack::object& request, Packer* reply) {
         add_header(status_codes::DATABASE_OPENING_ERROR, e.what(), reply);
         return;
     }
+    add_header(status_codes::OK, response_messages::OK, reply);
+}
+
+void DBServer::endpoint_drop(const msgpack::object& request, Packer* reply) {
+    std::map<std::string, std::string> msg;
+    try {
+        request.convert(msg);
+    } catch (msgpack::type_error& e) {
+        // TODO: log error, message cannot be deserialized
+        std::string msg("Deserialization failed: " + std::string(e.what()));
+        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply);
+        return;
+    }
+    std::string name;
+    std::string path;
+    try {
+        name = msg["database"];
+        path = msg["path"];
+    } catch (std::out_of_range& e) {
+        std::string msg("Missing database name or path.");
+        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        return;
+    }
+    if (!databases_.count(name)) {
+        std::string msg("Database name not found.");
+        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        return;
+    }
+    Database& db = *databases_.at(name);
+    if (db.path() != path) {
+        std::string msg("Database paths do not match.");
+        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        return;
+    }
+    db.close();
+    std::remove(path.c_str());
     add_header(status_codes::OK, response_messages::OK, reply);
 }
 

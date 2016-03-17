@@ -43,6 +43,10 @@ void Database::connect() {
     sqlite3_trace(db_, trace_callback, NULL);
 }
 
+void Database::close() {
+    sqlite3_close(db_);
+}
+
 std::string Database::path() {
     return path_;
 }

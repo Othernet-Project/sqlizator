@@ -26,6 +26,7 @@ class Database {
     explicit Database(const std::string& path);
     ~Database();
     void connect();
+    void close();
     void query(Operation operation,
                const std::string& query,
                const msgpack::object_handle& parameters,
