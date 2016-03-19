@@ -34,7 +34,7 @@ class DBServer: public tcpserver::Server {
     DBContainer databases_;
     EndpointMap endpoints_;
 
-    void add_header(int status, const std::string& message, Packer* reply_header);
+    void set_status(int status, const std::string& message, Packer* reply_header);
     void endpoint_connect(const msgpack::object& request,
                           Packer* reply_header,
                           Packer* reply_data);
