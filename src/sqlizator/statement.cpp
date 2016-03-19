@@ -82,22 +82,23 @@ Statement::Statement(sqlite3* db,
         }
     } else {
         std::map<std::string, msgpack::object> unpacked;
-        for (uint64_t i = 0; i < obj.via.map.size; i++) {
-            msgpack::object_kv p_mo(obj.via.map.ptr[i]);
-            std::string key(p_mo.key.via.str.ptr, p_mo.key.via.str.size);
-            unpacked.insert(std::make_pair(key, p_mo.val));
+        try {
+            obj.convert(unpacked);
+        } catch (msgpack::type_error& e) {
+            throw sqlite_error("Binding parameters to statement failed. "
+                               "Invalid map.");
         }
         for (uint64_t i = 0; i < param_count; i++) {
             std::string binding_name(sqlite3_bind_parameter_name(statement_, i + 1));
             binding_name.erase(0, 1);  // remove first `:` character
-            msgpack::object obj;
+            msgpack::object value;
             try {
-                obj = unpacked.at(binding_name);
+                value = unpacked.at(binding_name);
             } catch (std::out_of_range& e) {
                 throw sqlite_error("Binding parameters to statement failed. "
                                    "Missing key: " + binding_name);
             }
-            int rc = bind_param(obj, i + 1);
+            int rc = bind_param(value, i + 1);
             if (rc != SQLITE_OK)
                 throw sqlite_error(sqlite3_errstr(rc));
         }
