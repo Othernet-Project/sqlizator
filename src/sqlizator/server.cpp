@@ -24,11 +24,18 @@ DBServer::DBServer(const std::string& port): tcpserver::Server(port) {
 
 void DBServer::set_status(int status,
                           const std::string& message,
-                          Packer* reply_header) {
+                          Packer* reply_header,
+                          bool add_defaults) {
     reply_header->pack(std::string("status"));
     reply_header->pack(status);
     reply_header->pack(std::string("message"));
     reply_header->pack(message);
+    if (add_defaults) {
+        reply_header->pack(std::string("rowcount"));
+        reply_header->pack(-1);
+        reply_header->pack(std::string("columns"));
+        reply_header->pack(msgpack::type::nil_t());
+    }
 }
 
 void DBServer::endpoint_connect(const msgpack::object& request,
@@ -143,7 +150,7 @@ void DBServer::endpoint_query(const msgpack::object& request,
         set_status(status_codes::INVALID_QUERY, e.what(), reply_header);
         return;
     }
-    set_status(status_codes::OK, response_messages::OK, reply_header);
+    set_status(status_codes::OK, response_messages::OK, reply_header, false);
 }
 
 DBServer::endpoint_fn DBServer::identify_endpoint(const msgpack::object& request) {
