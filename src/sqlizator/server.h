@@ -28,15 +28,22 @@ struct MsgType {
 class DBServer: public tcpserver::Server {
  private:
     typedef void (DBServer::*endpoint_fn)(const msgpack::object& request,
-                                          Packer* reply);
+                                          Packer* reply_header,
+                                          Packer* reply_data);
     typedef std::map<std::string, endpoint_fn> EndpointMap;
     DBContainer databases_;
     EndpointMap endpoints_;
 
-    void add_header(int status, const std::string& message, Packer* reply);
-    void endpoint_connect(const msgpack::object& request, Packer* reply);
-    void endpoint_drop(const msgpack::object& request, Packer* reply);
-    void endpoint_query(const msgpack::object& request, Packer* reply);
+    void add_header(int status, const std::string& message, Packer* reply_header);
+    void endpoint_connect(const msgpack::object& request,
+                          Packer* reply_header,
+                          Packer* reply_data);
+    void endpoint_drop(const msgpack::object& request,
+                       Packer* reply_header,
+                       Packer* reply_data);
+    void endpoint_query(const msgpack::object& request,
+                        Packer* reply_header,
+                        Packer* reply_data);
     endpoint_fn identify_endpoint(const msgpack::object& request);
     virtual void handle(const byte_vec& input, byte_vec* output);
 

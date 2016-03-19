@@ -21,14 +21,14 @@ class Statement {
     sqlite3_stmt* statement_;
 
     int bind_param(const msgpack::object& v, int pos);
-    void add_meta_info(Packer* packer);
+    void add_columns_meta_info(Packer* packer);
     void fetch_into(Packer* packer);
  public:
     explicit Statement(sqlite3* db,
                        const std::string& query,
                        const msgpack::object_handle& parameters);
     ~Statement();
-    uint64_t execute(Packer* packer, bool collect_result);
+    uint64_t execute(Packer* header, Packer* data, bool collect_result);
 };
 
 }  // namespace sqlizator

@@ -30,7 +30,8 @@ class Database {
     void query(Operation operation,
                const std::string& query,
                const msgpack::object_handle& parameters,
-               Packer* into);
+               Packer* header,
+               Packer* data);
     std::string path();
 };
 

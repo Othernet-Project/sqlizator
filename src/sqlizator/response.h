@@ -13,6 +13,8 @@ namespace sqlizator {
 
 typedef msgpack::packer<msgpack::sbuffer> Packer;
 
+static const int HEADER_MEMBER_COUNT = 4;
+
 namespace status_codes {
 
 static const int OK = 0;

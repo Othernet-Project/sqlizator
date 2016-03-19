@@ -24,22 +24,23 @@ DBServer::DBServer(const std::string& port): tcpserver::Server(port) {
 
 void DBServer::add_header(int status,
                           const std::string& message,
-                          Packer* reply) {
-    reply->pack_map(2);
-    reply->pack(std::string("status"));
-    reply->pack(status);
-    reply->pack(std::string("message"));
-    reply->pack(message);
+                          Packer* reply_header) {
+    reply_header->pack(std::string("status"));
+    reply_header->pack(status);
+    reply_header->pack(std::string("message"));
+    reply_header->pack(message);
 }
 
-void DBServer::endpoint_connect(const msgpack::object& request, Packer* reply) {
+void DBServer::endpoint_connect(const msgpack::object& request,
+                                Packer* reply_header,
+                                Packer* reply_data) {
     std::map<std::string, std::string> msg;
     try {
         request.convert(msg);
     } catch (msgpack::type_error& e) {
         // TODO: log error, message cannot be deserialized
         std::string msg("Deserialization failed: " + std::string(e.what()));
-        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply);
+        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply_header);
         return;
     }
     std::string name;
@@ -49,7 +50,7 @@ void DBServer::endpoint_connect(const msgpack::object& request, Packer* reply) {
         path = msg["path"];
     } catch (std::out_of_range& e) {
         std::string msg("Missing database name or path.");
-        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        add_header(status_codes::INVALID_REQUEST, msg, reply_header);
         return;
     }
     // create db object only if it's not yet open already
@@ -63,26 +64,28 @@ void DBServer::endpoint_connect(const msgpack::object& request, Packer* reply) {
     // same name was used for two different databases, which is unacceptable
     if (db.path() != path) {
         std::string msg("Database name already in use.");
-        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        add_header(status_codes::INVALID_REQUEST, msg, reply_header);
         return;
     }
     try {
         db.connect();
     } catch (sqlite_error& e) {
-        add_header(status_codes::DATABASE_OPENING_ERROR, e.what(), reply);
+        add_header(status_codes::DATABASE_OPENING_ERROR, e.what(), reply_header);
         return;
     }
-    add_header(status_codes::OK, response_messages::OK, reply);
+    add_header(status_codes::OK, response_messages::OK, reply_header);
 }
 
-void DBServer::endpoint_drop(const msgpack::object& request, Packer* reply) {
+void DBServer::endpoint_drop(const msgpack::object& request,
+                             Packer* reply_header,
+                             Packer* reply_data) {
     std::map<std::string, std::string> msg;
     try {
         request.convert(msg);
     } catch (msgpack::type_error& e) {
         // TODO: log error, message cannot be deserialized
         std::string msg("Deserialization failed: " + std::string(e.what()));
-        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply);
+        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply_header);
         return;
     }
     std::string name;
@@ -92,33 +95,35 @@ void DBServer::endpoint_drop(const msgpack::object& request, Packer* reply) {
         path = msg["path"];
     } catch (std::out_of_range& e) {
         std::string msg("Missing database name or path.");
-        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        add_header(status_codes::INVALID_REQUEST, msg, reply_header);
         return;
     }
     if (!databases_.count(name)) {
         std::string msg("Database name not found.");
-        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        add_header(status_codes::INVALID_REQUEST, msg, reply_header);
         return;
     }
     Database& db = *databases_.at(name);
     if (db.path() != path) {
         std::string msg("Database paths do not match.");
-        add_header(status_codes::INVALID_REQUEST, msg, reply);
+        add_header(status_codes::INVALID_REQUEST, msg, reply_header);
         return;
     }
     db.close();
     std::remove(path.c_str());
-    add_header(status_codes::OK, response_messages::OK, reply);
+    add_header(status_codes::OK, response_messages::OK, reply_header);
 }
 
-void DBServer::endpoint_query(const msgpack::object& request, Packer* reply) {
+void DBServer::endpoint_query(const msgpack::object& request,
+                              Packer* reply_header,
+                              Packer* reply_data) {
     MsgType msg;
     try {
         request.convert(msg);
     } catch (msgpack::type_error& e) {
         // TODO: log error, message cannot be deserialized
         std::string msg("Deserialization failed: " + std::string(e.what()));
-        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply);
+        add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply_header);
         return;
     }
     Database* db;
@@ -126,17 +131,21 @@ void DBServer::endpoint_query(const msgpack::object& request, Packer* reply) {
         db = databases_.at(msg.database).get();
     } catch (std::out_of_range& e) {
         // TODO: log error, invalid database name
-        add_header(status_codes::DATABASE_NOT_FOUND, e.what(), reply);
+        add_header(status_codes::DATABASE_NOT_FOUND, e.what(), reply_header);
         return;
     }
     try {
-        db->query(msg.operation, msg.query, msg.parameters, reply);
+        db->query(msg.operation,
+                  msg.query,
+                  msg.parameters,
+                  reply_header,
+                  reply_data);
     } catch (sqlite_error& e) {
         // TODO: log error, invalid query
-        add_header(status_codes::INVALID_QUERY, e.what(), reply);
+        add_header(status_codes::INVALID_QUERY, e.what(), reply_header);
         return;
     }
-    add_header(status_codes::OK, response_messages::OK, reply);
+    add_header(status_codes::OK, response_messages::OK, reply_header);
 }
 
 DBServer::endpoint_fn DBServer::identify_endpoint(const msgpack::object& request) {
@@ -167,19 +176,28 @@ void DBServer::handle(const byte_vec& input, byte_vec* output) {
     msgpack::unpack(result, str_input.data(), input.size());
     msgpack::object request(result.get());
     // prepare reply object
-    msgpack::sbuffer buffer;
-    Packer reply(&buffer);
+    msgpack::sbuffer header_buf;
+    msgpack::sbuffer data_buf;
+    Packer reply_header(&header_buf);
+    Packer reply_data(&data_buf);
+    // set initial structure of header and specify number of expected items
+    reply_header.pack_map(HEADER_MEMBER_COUNT);
     // identify endpoint function based on request data
     endpoint_fn endpoint;
     try {
         endpoint = identify_endpoint(request);
     } catch (invalid_request& e) {
-        add_header(status_codes::INVALID_REQUEST, e.what(), &reply);
+        add_header(status_codes::INVALID_REQUEST, e.what(), &reply_header);
     }
     // get reply from endpoint function
-    (this->*endpoint)(request, &reply);
+    (this->*endpoint)(request, &reply_header, &reply_data);
     // write serialized reply data into output buffer
-    output->insert(output->end(), buffer.data(), buffer.data() + buffer.size());
+    output->insert(output->end(),
+                   header_buf.data(),
+                   header_buf.data() + header_buf.size());
+    output->insert(output->end(),
+                   data_buf.data(),
+                   data_buf.data() + data_buf.size());
 }
 
 }  // namespace sqlizator

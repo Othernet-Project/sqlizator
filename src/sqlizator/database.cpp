@@ -24,10 +24,11 @@ Database::~Database() {
 void Database::query(Operation operation,
                      const std::string& query,
                      const msgpack::object_handle& parameters,
-                     Packer* into) {
+                     Packer* header,
+                     Packer* data) {
     Statement stmt(db_, query, parameters);
     bool collect_result = (operation == Operation::EXECUTE_AND_FETCH);
-    stmt.execute(into, collect_result);
+    stmt.execute(header, data, collect_result);
 }
 
 void trace_callback(void* udp, const char* sql) {

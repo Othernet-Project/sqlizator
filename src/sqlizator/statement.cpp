@@ -108,11 +108,12 @@ Statement::~Statement() {
     sqlite3_finalize(statement_);
 }
 
-void Statement::add_meta_info(Packer* packer) {
+void Statement::add_columns_meta_info(Packer* packer) {
     int col_count = sqlite3_column_count(statement_);
     if (col_count == 0)
         return;
 
+    packer->pack("columns");
     packer->pack_array(col_count);
     for (int i = 0; i < col_count; ++i) {
         const char* col_name = sqlite3_column_name(statement_, i);
@@ -148,17 +149,19 @@ void Statement::fetch_into(Packer* packer) {
     }
 }
 
-uint64_t Statement::execute(Packer* packer, bool collect_result) {
-    uint64_t row_count = 0;
-    add_meta_info(packer);
+uint64_t Statement::execute(Packer* header, Packer* data, bool collect_result) {
+    uint64_t rowcount = 0;
+    add_columns_meta_info(header);
     while (true) {
         int ret = sqlite3_step(statement_);
         if (ret == SQLITE_DONE) {
-            return row_count;
+            header->pack("rowcount");
+            header->pack(rowcount);
+            return rowcount;
         } else if (ret == SQLITE_ROW) {
-            row_count += 1;
+            rowcount += 1;
             if (collect_result)
-                fetch_into(packer);
+                fetch_into(data);
         } else {
             throw sqlite_error(sqlite3_errstr(ret));
         }
