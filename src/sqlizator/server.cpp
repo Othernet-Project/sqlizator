@@ -126,20 +126,18 @@ void DBServer::endpoint_query(const msgpack::object& request,
         add_header(status_codes::DESERIALIZATION_ERROR, e.what(), reply_header);
         return;
     }
-    Database* db;
-    try {
-        db = databases_.at(msg.database).get();
-    } catch (std::out_of_range& e) {
-        // TODO: log error, invalid database name
-        add_header(status_codes::DATABASE_NOT_FOUND, e.what(), reply_header);
+    if (!databases_.count(msg.database)) {
+        std::string msg("Database name not found.");
+        add_header(status_codes::DATABASE_NOT_FOUND, msg, reply_header);
         return;
     }
+    Database& db = *databases_.at(msg.database);
     try {
-        db->query(msg.operation,
-                  msg.query,
-                  msg.parameters,
-                  reply_header,
-                  reply_data);
+        db.query(msg.operation,
+                 msg.query,
+                 msg.parameters,
+                 reply_header,
+                 reply_data);
     } catch (sqlite_error& e) {
         // TODO: log error, invalid query
         add_header(status_codes::INVALID_QUERY, e.what(), reply_header);
