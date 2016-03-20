@@ -132,7 +132,7 @@ void Statement::fetch_into(Packer* packer) {
     for (int i = 0; i < col_count; ++i) {
         int col_type = sqlite3_column_type(statement_, i);
         if (col_type == SQLITE_NULL) {
-            packer->pack(msgpack::type::nil_t());
+            packer->pack_nil();
         } else if (col_type == SQLITE_INTEGER) {
             packer->pack(sqlite3_column_int64(statement_, i));
         } else if (col_type == SQLITE_FLOAT) {
