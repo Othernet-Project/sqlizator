@@ -151,12 +151,14 @@ void Statement::fetch_into(Packer* packer) {
 }
 
 uint64_t Statement::execute(Packer* header, Packer* data, bool collect_result) {
-    uint64_t rowcount = 0;
     add_columns_meta_info(header);
+    uint64_t rowcount = 0;
     while (true) {
         int ret = sqlite3_step(statement_);
         if (ret == SQLITE_DONE) {
             header->pack("rowcount");
+            if (sqlite3_stmt_readonly(statement_))
+                rowcount = sqlite3_changes(db_);
             header->pack(rowcount);
             return rowcount;
         } else if (ret == SQLITE_ROW) {
