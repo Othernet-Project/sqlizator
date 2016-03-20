@@ -36,8 +36,8 @@ class DBServer: public tcpserver::Server {
 
     void set_status(int status,
                     const std::string& message,
-                    Packer* reply_header,
-                    bool add_defaults = true);
+                    Packer* reply_header);
+    void write_query_header_defaults(Packer* reply_header);
     void endpoint_connect(const msgpack::object& request,
                           Packer* reply_header,
                           Packer* reply_data);

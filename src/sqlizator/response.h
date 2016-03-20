@@ -13,7 +13,13 @@ namespace sqlizator {
 
 typedef msgpack::packer<msgpack::sbuffer> Packer;
 
-static const int HEADER_MEMBER_COUNT = 4;
+namespace header_sizes {
+
+static const int CONNECT = 2;
+static const int DROP = 2;
+static const int QUERY = 4;
+
+}  // namespace header_sizes
 
 namespace status_codes {
 
