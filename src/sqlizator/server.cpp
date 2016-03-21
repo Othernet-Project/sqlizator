@@ -57,11 +57,9 @@ void DBServer::endpoint_connect(const msgpack::object& request,
     // check if it's already connected to the database maybe
     if (!databases_.count(name)) {
         // no connection exists yet
-        databases_.insert(std::make_pair(name,
-                                         std::shared_ptr<Database>(new Database(path))));
-        Database& db = *databases_.at(name);
+        std::shared_ptr<Database> db(new Database(path));
         try {
-            db.connect();
+            db->connect();
         } catch (sqlite_error& e) {
             set_status(status_codes::DATABASE_OPENING_ERROR,
                        e.what() + e.extended(),
@@ -73,25 +71,18 @@ void DBServer::endpoint_connect(const msgpack::object& request,
             if (std::find(std::begin(PRAGMAS),
                           std::end(PRAGMAS),
                           it->first) != std::end(PRAGMAS))
-                db.pragma("PRAGMA " + it->first + "=" + it->second + ";");
+                db->pragma("PRAGMA " + it->first + "=" + it->second + ";");
         }
+        databases_.insert(std::make_pair(name, std::move(db)));
     } else {
         // already connected to a database with that name
-        Database& db = *databases_.at(name);
+        std::shared_ptr<Database> db = databases_.at(name);
         // in case the database was already open, verify that the passed in path
         // matches the path of the already open database. in case it doesn't, the
         // same name was used for two different databases, which is unacceptable
-        if (db.path() != path) {
+        if (db->path() != path) {
             set_status(status_codes::INVALID_REQUEST,
                        "Database name already in use.",
-                       reply_header);
-            return;
-        }
-        try {
-            db.connect();
-        } catch (sqlite_error& e) {
-            set_status(status_codes::DATABASE_OPENING_ERROR,
-                       e.what() + e.extended(),
                        reply_header);
             return;
         }
@@ -128,14 +119,15 @@ void DBServer::endpoint_drop(const msgpack::object& request,
                    reply_header);
         return;
     }
-    Database& db = *databases_.at(name);
-    if (db.path() != path) {
+    std::shared_ptr<Database> db = databases_.at(name);
+    if (db->path() != path) {
         set_status(status_codes::INVALID_REQUEST,
                    "Database paths do not match.",
                    reply_header);
         return;
     }
-    db.close();
+    databases_.erase(name);
+    db->close();
     std::remove(path.c_str());
     set_status(status_codes::OK, response_messages::OK, reply_header);
 }
