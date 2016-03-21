@@ -8,6 +8,7 @@
 #include <msgpack.hpp>
 
 #include <string>
+#include <vector>
 
 #include "sqlizator/response.h"
 
@@ -18,6 +19,8 @@ enum Operation {
     EXECUTE_AND_FETCH = 2
 };
 
+const std::vector<std::string> PRAGMAS{"journal_mode", "foreign_keys"};
+
 class Database {
  private:
     sqlite3* db_;
@@ -27,6 +30,7 @@ class Database {
     ~Database();
     void connect();
     void close();
+    void pragma(const std::string& query);
     void query(Operation operation,
                const std::string& query,
                const msgpack::object_handle& parameters,

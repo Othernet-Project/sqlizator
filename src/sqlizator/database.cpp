@@ -21,6 +21,18 @@ Database::~Database() {
     sqlite3_close(db_);
 }
 
+int callback(void *, int, char **, char **) {
+    return 0;
+}
+
+void Database::pragma(const std::string& query) {
+    char *err_msg = 0;
+    int ret = sqlite3_exec(db_, query.data(), callback, 0, &err_msg);
+    if (ret != SQLITE_OK) {
+        throw sqlite_error(err_msg);
+    }
+}
+
 void Database::query(Operation operation,
                      const std::string& query,
                      const msgpack::object_handle& parameters,

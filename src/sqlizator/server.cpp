@@ -54,26 +54,37 @@ void DBServer::endpoint_connect(const msgpack::object& request,
                    reply_header);
         return;
     }
-    // create db object only if it's not yet open already
-    if (!databases_.count(name))
+    // check if it's already connected to the database maybe
+    if (!databases_.count(name)) {
+        // no connection exists yet
         databases_.insert(std::make_pair(name,
                                          std::shared_ptr<Database>(new Database(path))));
-
-    Database& db = *databases_.at(name);
-    // in case the database was already open, verify that the passed in path
-    // matches the path of the already open database. in case it doesn't, the
-    // same name was used for two different databases, which is unacceptable
-    if (db.path() != path) {
-        set_status(status_codes::INVALID_REQUEST,
-                   "Database name already in use.",
-                   reply_header);
-        return;
-    }
-    try {
-        db.connect();
-    } catch (sqlite_error& e) {
-        set_status(status_codes::DATABASE_OPENING_ERROR, e.what(), reply_header);
-        return;
+        Database& db = *databases_.at(name);
+        try {
+            db.connect();
+        } catch (sqlite_error& e) {
+            set_status(status_codes::DATABASE_OPENING_ERROR, e.what(), reply_header);
+            return;
+        }
+        // apply passed in pragmas to newly opened database
+        for (auto it = msg.begin(); it != msg.end(); ++it) {
+            if (std::find(std::begin(PRAGMAS),
+                          std::end(PRAGMAS),
+                          it->first) != std::end(PRAGMAS))
+                db.pragma("PRAGMA " + it->first + "=" + it->second + ";");
+        }
+    } else {
+        // already connected to a database with that name
+        Database& db = *databases_.at(name);
+        // in case the database was already open, verify that the passed in path
+        // matches the path of the already open database. in case it doesn't, the
+        // same name was used for two different databases, which is unacceptable
+        if (db.path() != path) {
+            set_status(status_codes::INVALID_REQUEST,
+                       "Database name already in use.",
+                       reply_header);
+            return;
+        }
     }
     set_status(status_codes::OK, response_messages::OK, reply_header);
 }
