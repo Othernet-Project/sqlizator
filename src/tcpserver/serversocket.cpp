@@ -46,6 +46,12 @@ int ServerSocket::bind() {
         if (socket_fd_ == -1)
             continue;
 
+        int so_reuseaddr = 1;
+        setsockopt(socket_fd_,
+                   SOL_SOCKET,
+                   SO_REUSEADDR,
+                   &so_reuseaddr,
+                   sizeof(so_reuseaddr));
         if (::bind(socket_fd_, aip->ai_addr, aip->ai_addrlen) == 0)
             break; // bind succeeded
         // in case bind failed, close the created socket file descriptor
