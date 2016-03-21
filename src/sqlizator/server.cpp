@@ -63,7 +63,9 @@ void DBServer::endpoint_connect(const msgpack::object& request,
         try {
             db.connect();
         } catch (sqlite_error& e) {
-            set_status(status_codes::DATABASE_OPENING_ERROR, e.what(), reply_header);
+            set_status(status_codes::DATABASE_OPENING_ERROR,
+                       e.what() + e.extended(),
+                       reply_header);
             return;
         }
         // apply passed in pragmas to newly opened database
@@ -88,7 +90,9 @@ void DBServer::endpoint_connect(const msgpack::object& request,
         try {
             db.connect();
         } catch (sqlite_error& e) {
-            set_status(status_codes::DATABASE_OPENING_ERROR, e.what(), reply_header);
+            set_status(status_codes::DATABASE_OPENING_ERROR,
+                       e.what() + e.extended(),
+                       reply_header);
             return;
         }
     }
@@ -171,7 +175,9 @@ void DBServer::endpoint_query(const msgpack::object& request,
                  reply_data);
     } catch (sqlite_error& e) {
         // TODO: log error, invalid query
-        set_status(status_codes::INVALID_QUERY, e.what(), reply_header);
+        set_status(status_codes::INVALID_QUERY,
+                   e.what() + e.extended(),
+                   reply_header);
         write_query_header_defaults(reply_header);
         return;
     }
