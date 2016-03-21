@@ -160,7 +160,7 @@ uint64_t Statement::execute(Packer* header, Packer* data, bool collect_result) {
         int ret = sqlite3_step(statement_);
         if (ret == SQLITE_DONE) {
             header->pack("rowcount");
-            if (sqlite3_stmt_readonly(statement_))
+            if (!sqlite3_stmt_readonly(statement_))
                 rowcount = sqlite3_changes(db_);
             header->pack(rowcount);
             return rowcount;
