@@ -85,6 +85,12 @@ void DBServer::endpoint_connect(const msgpack::object& request,
                        reply_header);
             return;
         }
+        try {
+            db.connect();
+        } catch (sqlite_error& e) {
+            set_status(status_codes::DATABASE_OPENING_ERROR, e.what(), reply_header);
+            return;
+        }
     }
     set_status(status_codes::OK, response_messages::OK, reply_header);
 }
