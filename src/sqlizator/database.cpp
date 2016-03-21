@@ -26,10 +26,9 @@ int callback(void *, int, char **, char **) {
 }
 
 void Database::pragma(const std::string& query) {
-    char *err_msg = 0;
-    int ret = sqlite3_exec(db_, query.data(), callback, 0, &err_msg);
+    int ret = sqlite3_exec(db_, query.data(), callback, 0, NULL);
     if (ret != SQLITE_OK) {
-        throw sqlite_error(err_msg);
+        throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
     }
 }
 
@@ -48,10 +47,9 @@ void trace_callback(void* udp, const char* sql) {
 }
 
 void Database::connect() {
-    int result = sqlite3_open(path_.c_str(), &db_);
-    if (result != SQLITE_OK) {
-        std::string msg(sqlite3_errmsg(db_));
-        throw sqlite_error(msg);
+    int ret = sqlite3_open(path_.c_str(), &db_);
+    if (ret != SQLITE_OK) {
+        throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
     }
     sqlite3_trace(db_, trace_callback, NULL);
 }

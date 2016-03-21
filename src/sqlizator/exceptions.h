@@ -10,9 +10,18 @@
 namespace sqlizator {
 
 class sqlite_error: public std::runtime_error {
+ private:
+    std::string extended_;
  public:
     explicit sqlite_error(const std::string& message):
                                                 std::runtime_error(message) {}
+    explicit sqlite_error(const std::string& message,
+                          const std::string& extended):
+                                                std::runtime_error(message),
+                                                extended_(extended) {}
+    const std::string extended() {
+        return extended_;
+    }
 };
 
 class invalid_request: public std::runtime_error {

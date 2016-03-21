@@ -68,24 +68,26 @@ Statement::Statement(sqlite3* db,
                                  &statement_,
                                  NULL);
     if (ret != SQLITE_OK)
-        throw sqlite_error(sqlite3_errstr(ret));
+        throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
 
     uint64_t param_count = sqlite3_bind_parameter_count(statement_);
     if (obj.type == msgpack::type::ARRAY) {
         if (obj.via.array.size != param_count)
-            throw sqlite_error("Number of passed parameters does not match "
+            throw sqlite_error("Parameter binding failed.",
+                               "Number of passed parameters does not match "
                                "number of required parameters.");
         for (uint64_t i = 0; i < param_count; i++) {
             int rc = bind_param(obj.via.array.ptr[i], i + 1);
             if (rc != SQLITE_OK)
-                throw sqlite_error(sqlite3_errstr(rc));
+                throw sqlite_error(sqlite3_errstr(rc), sqlite3_errmsg(db_));
         }
     } else {
         std::map<std::string, msgpack::object> unpacked;
         try {
             obj.convert(unpacked);
         } catch (msgpack::type_error& e) {
-            throw sqlite_error("Binding parameters to statement failed. "
+            throw sqlite_error("Parameter binding failed.",
+                               "Binding parameters to statement failed. "
                                "Invalid map.");
         }
         for (uint64_t i = 0; i < param_count; i++) {
@@ -95,12 +97,13 @@ Statement::Statement(sqlite3* db,
             try {
                 value = unpacked.at(binding_name);
             } catch (std::out_of_range& e) {
-                throw sqlite_error("Binding parameters to statement failed. "
+                throw sqlite_error("Parameter binding failed.",
+                                   "Binding parameters to statement failed. "
                                    "Missing key: " + binding_name);
             }
             int rc = bind_param(value, i + 1);
             if (rc != SQLITE_OK)
-                throw sqlite_error(sqlite3_errstr(rc));
+                throw sqlite_error(sqlite3_errstr(rc), sqlite3_errmsg(db_));
         }
     }
 }
@@ -166,7 +169,7 @@ uint64_t Statement::execute(Packer* header, Packer* data, bool collect_result) {
             if (collect_result)
                 fetch_into(data);
         } else {
-            throw sqlite_error(sqlite3_errstr(ret));
+            throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
         }
     }
 }
