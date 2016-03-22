@@ -71,7 +71,7 @@ void DBServer::endpoint_connect(const msgpack::object& request,
             if (std::find(std::begin(PRAGMAS),
                           std::end(PRAGMAS),
                           it->first) != std::end(PRAGMAS))
-                db->pragma("PRAGMA " + it->first + "=" + it->second + ";");
+                db->pragma(it->first, it->second);
         }
         databases_.insert(std::make_pair(name, std::move(db)));
     } else {

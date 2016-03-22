@@ -30,7 +30,7 @@ class Database {
     ~Database();
     void connect();
     void close();
-    void pragma(const std::string& query);
+    void pragma(const std::string& key, const std::string& value);
     void query(Operation operation,
                const std::string& query,
                const msgpack::object_handle& parameters,

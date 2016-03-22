@@ -25,7 +25,8 @@ int callback(void *, int, char **, char **) {
     return 0;
 }
 
-void Database::pragma(const std::string& query) {
+void Database::pragma(const std::string& key, const std::string& value) {
+    std::string query("PRAGMA " + key + "=" + value + ";");
     int ret = sqlite3_exec(db_, query.data(), callback, 0, NULL);
     if (ret != SQLITE_OK) {
         throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
