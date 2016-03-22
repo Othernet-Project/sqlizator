@@ -15,9 +15,9 @@ typedef msgpack::packer<msgpack::sbuffer> Packer;
 
 namespace header_sizes {
 
-static const int CONNECT = 2;
-static const int DROP = 2;
-static const int QUERY = 4;
+static const int CONNECT = 3;
+static const int DROP = 3;
+static const int QUERY = 5;
 
 }  // namespace header_sizes
 
