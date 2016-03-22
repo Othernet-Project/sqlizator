@@ -31,13 +31,13 @@ int pragma_callback(void *, int, char **, char **) {
 }
 
 int busy_handler(void *data, int retry) {
-	BHData* bh_data = reinterpret_cast<BHData*>(data);
-	if (retry < bh_data->max_retry) {
-		sqlite3_sleep(bh_data->sleep_ms);
-		return 1;
+    BHData* bh_data = reinterpret_cast<BHData*>(data);
+    if (retry < bh_data->max_retry) {
+        sqlite3_sleep(bh_data->sleep_ms);
+        return 1;
 	}
     // exceeded max retry attempts, let it go, let it go
-	return 0;
+    return 0;
 }
 
 void Database::pragma(const std::string& key, const std::string& value) {

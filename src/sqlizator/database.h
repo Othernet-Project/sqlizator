@@ -23,8 +23,8 @@ static const int DEFAULT_MAX_RETRY = 100;
 static const int DEFAULT_SLEEP_MS = 100;
 
 struct BHData {
-	int max_retry;
-	int sleep_ms;
+    int max_retry;
+    int sleep_ms;
     explicit BHData(int max_retry, int sleep_ms): max_retry(max_retry),
                                                   sleep_ms(sleep_ms) {}
 };
