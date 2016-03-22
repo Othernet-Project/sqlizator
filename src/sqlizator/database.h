@@ -35,8 +35,8 @@ class Database {
  private:
     sqlite3* db_;
     std::string path_;
-    int max_retry_;
-    int sleep_ms_;
+    BHData bh_data_;
+
  public:
     explicit Database(const std::string& path,
                       int max_retry = DEFAULT_MAX_RETRY,

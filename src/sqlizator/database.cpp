@@ -12,14 +12,13 @@
 #include "sqlizator/exceptions.h"
 #include "sqlizator/response.h"
 #include "sqlizator/statement.h"
-
+#include <iostream>
 namespace sqlizator {
 
 Database::Database(const std::string& path,
                    int max_retry,
                    int sleep_ms): path_(path),
-                                  max_retry_(max_retry),
-                                  sleep_ms_(sleep_ms) {}
+                                  bh_data_(max_retry, sleep_ms) {}
 
 Database::~Database() {
     sqlite3_close(db_);
@@ -64,11 +63,10 @@ void trace_callback(void* udp, const char* sql) {
 
 void Database::connect() {
     int ret = sqlite3_open(path_.c_str(), &db_);
-    if (ret != SQLITE_OK) {
+    if (ret != SQLITE_OK)
         throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
-    }
-    BHData bh_data(max_retry_, sleep_ms_);
-    sqlite3_busy_handler(db_, busy_handler, &bh_data);
+
+    sqlite3_busy_handler(db_, busy_handler, &bh_data_);
     sqlite3_trace(db_, trace_callback, NULL);
 }
 
