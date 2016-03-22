@@ -19,14 +19,28 @@ enum Operation {
     EXECUTE_AND_FETCH = 2
 };
 
+static const int DEFAULT_MAX_RETRY = 100;
+static const int DEFAULT_SLEEP_MS = 100;
+
+struct BHData {
+	int max_retry;
+	int sleep_ms;
+    explicit BHData(int max_retry, int sleep_ms): max_retry(max_retry),
+                                                  sleep_ms(sleep_ms) {}
+};
+
 const std::vector<std::string> PRAGMAS{"journal_mode", "foreign_keys"};
 
 class Database {
  private:
     sqlite3* db_;
     std::string path_;
+    int max_retry_;
+    int sleep_ms_;
  public:
-    explicit Database(const std::string& path);
+    explicit Database(const std::string& path,
+                      int max_retry = DEFAULT_MAX_RETRY,
+                      int sleep_ms = DEFAULT_SLEEP_MS);
     ~Database();
     void connect();
     void close();

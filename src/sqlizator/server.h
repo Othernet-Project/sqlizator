@@ -15,8 +15,9 @@
 namespace sqlizator {
 
 using tcpserver::byte_vec;
-typedef std::map<std::string, std::shared_ptr<Database>> DBContainer;
+typedef std::map<int, std::shared_ptr<Database>> ConnectionMap;
 typedef std::map<std::string, msgpack::object> RequestData;
+typedef std::map<std::string, std::string> StringMap;
 
 struct MsgType {
     std::string database;
@@ -27,29 +28,37 @@ struct MsgType {
 
 class DBServer: public tcpserver::Server {
  private:
-    typedef void (DBServer::*endpoint_fn)(const msgpack::object& request,
+    typedef void (DBServer::*endpoint_fn)(int client_id,
+                                          const msgpack::object& request,
                                           Packer* reply_header,
                                           Packer* reply_data);
     typedef std::map<std::string, endpoint_fn> EndpointMap;
-    DBContainer databases_;
+    ConnectionMap connections_;
     EndpointMap endpoints_;
 
+    int get_optional_arg(const StringMap& msg,
+                         const std::string& name,
+                         int default_value);
     void set_status(int status,
                     const std::string& message,
                     const std::string& extended,
                     Packer* reply_header);
     void write_query_header_defaults(Packer* reply_header);
-    void endpoint_connect(const msgpack::object& request,
+    void endpoint_connect(int client_id,
+                          const msgpack::object& request,
                           Packer* reply_header,
                           Packer* reply_data);
-    void endpoint_drop(const msgpack::object& request,
+    void endpoint_drop(int client_id,
+                       const msgpack::object& request,
                        Packer* reply_header,
                        Packer* reply_data);
-    void endpoint_query(const msgpack::object& request,
+    void endpoint_query(int client_id,
+                        const msgpack::object& request,
                         Packer* reply_header,
                         Packer* reply_data);
     endpoint_fn identify_endpoint(const msgpack::object& request);
-    virtual void handle(const byte_vec& input, byte_vec* output);
+    virtual void handle(int client_id, const byte_vec& input, byte_vec* output);
+    virtual void disconnected(int client_id);
 
  public:
     explicit DBServer(const std::string& port);

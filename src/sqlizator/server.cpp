@@ -34,11 +34,26 @@ void DBServer::set_status(int status,
     reply_header->pack(extended);
 }
 
-void DBServer::endpoint_connect(const msgpack::object& request,
+int DBServer::get_optional_arg(const StringMap& msg,
+                               const std::string& name,
+                               int default_value) {
+    auto it = msg.find(name);
+    if (it != msg.end()) {
+        try {
+            return std::stoi(it->second);
+        } catch (...) {
+            return default_value;
+        }
+    }
+    return default_value;
+}
+
+void DBServer::endpoint_connect(int client_id,
+                                const msgpack::object& request,
                                 Packer* reply_header,
                                 Packer* reply_data) {
     reply_header->pack_map(header_sizes::CONNECT);
-    std::map<std::string, std::string> msg;
+    StringMap msg;
     try {
         request.convert(msg);
     } catch (msgpack::type_error& e) {
@@ -49,22 +64,22 @@ void DBServer::endpoint_connect(const msgpack::object& request,
                    reply_header);
         return;
     }
-    std::string name;
     std::string path;
     try {
-        name = msg["database"];
-        path = msg["path"];
+        path = msg["database"];
     } catch (std::out_of_range& e) {
         set_status(status_codes::INVALID_REQUEST,
-                   "Missing database name or path.",
+                   "Missing database path.",
                    "",
                    reply_header);
         return;
     }
     // check if it's already connected to the database maybe
-    if (!databases_.count(name)) {
+    if (!connections_.count(client_id)) {
         // no connection exists yet
-        std::shared_ptr<Database> db(new Database(path));
+        int max_retry = get_optional_arg(msg, "max_retry", DEFAULT_MAX_RETRY);
+        int sleep_ms = get_optional_arg(msg, "sleep_ms", DEFAULT_SLEEP_MS);
+        std::shared_ptr<Database> db(new Database(path, max_retry, sleep_ms));
         try {
             db->connect();
         } catch (sqlite_error& e) {
@@ -81,16 +96,16 @@ void DBServer::endpoint_connect(const msgpack::object& request,
                           it->first) != std::end(PRAGMAS))
                 db->pragma(it->first, it->second);
         }
-        databases_.insert(std::make_pair(name, std::move(db)));
+        connections_.insert(std::make_pair(client_id, std::move(db)));
     } else {
         // already connected to a database with that name
-        std::shared_ptr<Database> db = databases_.at(name);
+        auto db = connections_.at(client_id);
         // in case the database was already open, verify that the passed in path
         // matches the path of the already open database. in case it doesn't, the
         // same name was used for two different databases, which is unacceptable
         if (db->path() != path) {
             set_status(status_codes::INVALID_REQUEST,
-                       "Database name already in use under different path.",
+                       "Connection requested from same socket to a different database.",
                        db->path(),
                        reply_header);
             return;
@@ -99,7 +114,8 @@ void DBServer::endpoint_connect(const msgpack::object& request,
     set_status(status_codes::OK, response_messages::OK, "", reply_header);
 }
 
-void DBServer::endpoint_drop(const msgpack::object& request,
+void DBServer::endpoint_drop(int client_id,
+                             const msgpack::object& request,
                              Packer* reply_header,
                              Packer* reply_data) {
     reply_header->pack_map(header_sizes::DROP);
@@ -114,35 +130,25 @@ void DBServer::endpoint_drop(const msgpack::object& request,
                    reply_header);
         return;
     }
-    std::string name;
     std::string path;
     try {
-        name = msg["database"];
-        path = msg["path"];
+        path = msg["database"];
     } catch (std::out_of_range& e) {
         set_status(status_codes::INVALID_REQUEST,
-                   "Missing database name or path.",
+                   "Missing database path.",
                    "",
                    reply_header);
         return;
     }
-    if (!databases_.count(name)) {
-        set_status(status_codes::INVALID_REQUEST,
-                   "Database name not found.",
-                   name,
-                   reply_header);
-        return;
+    // delete connections to the particular database
+    auto it = connections_.begin();
+    while (it != connections_.end()) {
+        if (it->second->path() == path)
+            it = connections_.erase(it);
+        else
+            it++;
     }
-    std::shared_ptr<Database> db = databases_.at(name);
-    if (db->path() != path) {
-        set_status(status_codes::INVALID_REQUEST,
-                   "Database paths do not match.",
-                   path + " != " + db->path(),
-                   reply_header);
-        return;
-    }
-    databases_.erase(name);
-    db->close();
+    // remove database file from file system
     std::remove(path.c_str());
     set_status(status_codes::OK, response_messages::OK, "", reply_header);
 }
@@ -154,7 +160,8 @@ void DBServer::write_query_header_defaults(Packer* reply_header) {
     reply_header->pack_nil();
 }
 
-void DBServer::endpoint_query(const msgpack::object& request,
+void DBServer::endpoint_query(int client_id,
+                              const msgpack::object& request,
                               Packer* reply_header,
                               Packer* reply_data) {
     reply_header->pack_map(header_sizes::QUERY);
@@ -170,20 +177,20 @@ void DBServer::endpoint_query(const msgpack::object& request,
         write_query_header_defaults(reply_header);
         return;
     }
-    if (!databases_.count(msg.database)) {
-        set_status(status_codes::DATABASE_NOT_FOUND,
-                   "Database not found.",
+    if (!connections_.count(client_id)) {
+        set_status(status_codes::INVALID_REQUEST,
+                   "Not connected to database.",
                    msg.database,
                    reply_header);
         return;
     }
-    Database& db = *databases_.at(msg.database);
+    auto db = connections_.at(client_id);
     try {
-        db.query(msg.operation,
-                 msg.query,
-                 msg.parameters,
-                 reply_header,
-                 reply_data);
+        db->query(msg.operation,
+                  msg.query,
+                  msg.parameters,
+                  reply_header,
+                  reply_data);
     } catch (sqlite_error& e) {
         // TODO: log error, invalid query
         set_status(status_codes::INVALID_QUERY,
@@ -217,7 +224,7 @@ DBServer::endpoint_fn DBServer::identify_endpoint(const msgpack::object& request
     return endpoint;
 }
 
-void DBServer::handle(const byte_vec& input, byte_vec* output) {
+void DBServer::handle(int client_id, const byte_vec& input, byte_vec* output) {
     // unpack incoming data
     msgpack::unpacked result;
     std::string str_input(input.begin(), input.end());
@@ -236,7 +243,7 @@ void DBServer::handle(const byte_vec& input, byte_vec* output) {
         set_status(status_codes::INVALID_REQUEST, e.what(), "", &reply_header);
     }
     // get reply from endpoint function
-    (this->*endpoint)(request, &reply_header, &reply_data);
+    (this->*endpoint)(client_id, request, &reply_header, &reply_data);
     // write serialized reply data into output buffer
     output->insert(output->end(),
                    header_buf.data(),
@@ -244,6 +251,10 @@ void DBServer::handle(const byte_vec& input, byte_vec* output) {
     output->insert(output->end(),
                    data_buf.data(),
                    data_buf.data() + data_buf.size());
+}
+
+void DBServer::disconnected(int client_id) {
+    connections_.erase(client_id);
 }
 
 }  // namespace sqlizator

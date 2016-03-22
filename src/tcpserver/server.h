@@ -18,17 +18,21 @@
 
 namespace tcpserver {
 
-typedef std::map<int, std::unique_ptr<ClientSocket>> csock_map;
+typedef std::map<int, std::unique_ptr<ClientSocket>> SocketMap;
 
 class Server {
  private:
     ServerSocket socket_;
     Epoll epoll_;
-    csock_map clients_;
+    SocketMap clients_;
 
     void accept_connection(int fd);
+    void drop_connection(int fd);
     void receive_data(int fd);
-    virtual void handle(const byte_vec& input, byte_vec* output) = 0;
+    virtual void handle(int client_id,
+                        const byte_vec& input,
+                        byte_vec* output) = 0;
+    virtual void disconnected(int client_id) = 0;
 
  public:
     explicit Server(const std::string& port);

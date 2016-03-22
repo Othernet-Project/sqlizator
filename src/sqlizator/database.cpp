@@ -15,19 +15,34 @@
 
 namespace sqlizator {
 
-Database::Database(const std::string& path): path_(path) {}
+Database::Database(const std::string& path,
+                   int max_retry,
+                   int sleep_ms): path_(path),
+                                  max_retry_(max_retry),
+                                  sleep_ms_(sleep_ms) {}
 
 Database::~Database() {
     sqlite3_close(db_);
 }
 
-int callback(void *, int, char **, char **) {
+
+int pragma_callback(void *, int, char **, char **) {
     return 0;
+}
+
+int busy_handler(void *data, int retry) {
+	BHData* bh_data = reinterpret_cast<BHData*>(data);
+	if (retry < bh_data->max_retry) {
+		sqlite3_sleep(bh_data->sleep_ms);
+		return 1;
+	}
+    // exceeded max retry attempts, let it go, let it go
+	return 0;
 }
 
 void Database::pragma(const std::string& key, const std::string& value) {
     std::string query("PRAGMA " + key + "=" + value + ";");
-    int ret = sqlite3_exec(db_, query.data(), callback, 0, NULL);
+    int ret = sqlite3_exec(db_, query.data(), pragma_callback, 0, NULL);
     if (ret != SQLITE_OK) {
         throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
     }
@@ -52,6 +67,8 @@ void Database::connect() {
     if (ret != SQLITE_OK) {
         throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
     }
+    BHData bh_data(max_retry_, sleep_ms_);
+    sqlite3_busy_handler(db_, busy_handler, &bh_data);
     sqlite3_trace(db_, trace_callback, NULL);
 }
 

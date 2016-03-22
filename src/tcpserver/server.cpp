@@ -66,9 +66,14 @@ void Server::accept_connection(int fd) {
                                         std::placeholders::_1));
         } catch (epoll_error& e) {
             // TODO: log error
-            clients_.erase(in_fd);
+            drop_connection(in_fd);
         }
     }
+}
+
+void Server::drop_connection(int fd) {
+    clients_.erase(fd);
+    disconnected(fd);
 }
 
 void Server::receive_data(int fd) {
@@ -87,22 +92,22 @@ void Server::receive_data(int fd) {
         // TODO: log error
         // deleting the object will close the socket which will automatically
         // make epoll stop monitoring it as well
-        clients_.erase(fd);
+        drop_connection(fd);
         return;
     } catch (connection_closed& e) {
         // delete socket, but still process the received data after
-        clients_.erase(fd);
+        drop_connection(fd);
         return;
     }
     // process freshly read incoming data and write response into output buffer
     byte_vec output;
-    handle(input, &output);
+    handle(fd, input, &output);
     // send response from output buffer back to client
     try {
         p_clientsocket->send(output);
     } catch (socket_error& e) {
         // TODO: log error
-        clients_.erase(fd);
+        drop_connection(fd);
     }
 }
 
