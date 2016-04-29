@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "tcpserver/clientsocket.h"
@@ -25,7 +26,10 @@ class Server {
     ServerSocket socket_;
     Epoll epoll_;
     SocketMap clients_;
+    std::thread thread_;
+    volatile bool started_;
 
+    void run();
     void accept_connection(int fd);
     void drop_connection(int fd);
     void receive_data(int fd);
@@ -38,6 +42,8 @@ class Server {
     explicit Server(const std::string& port);
     virtual ~Server();
     void start();
+    void wait();
+    void stop();
 };
 
 }  // namespace tcpserver

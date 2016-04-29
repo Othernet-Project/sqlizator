@@ -60,6 +60,7 @@ int main(int argc, char* argv[]) {
 
     sqlizator::DBServer srv(std::to_string(port));
     srv.start();
+    srv.wait();
     return 0;
 }
 

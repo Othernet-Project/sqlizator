@@ -16,13 +16,25 @@
 namespace tcpserver {
 
 Server::Server(const std::string& port): socket_(port),
-                                         epoll_() {}
+                                         epoll_(),
+                                         thread_(),
+                                         started_(false){}
 
 Server::~Server() {
-    // TODO: close all open connections
+    if(started_) {
+        stop();
+    }
 }
 
 void Server::start() {
+    if(started_) {
+        throw server_error("server already running");
+    }
+    started_ = true;
+    thread_ = std::thread(&Server::run, this);
+}
+
+void Server::run() {
     try {
         socket_.bind();
         socket_.listen();
@@ -37,13 +49,32 @@ void Server::start() {
         // TODO: log error
         throw server_error(e.what());
     }
-    while (true) {
+    while (started_) {
         try {
             epoll_.wait();
         } catch (epoll_error& e) {
             throw server_error(e.what());
         }
     }
+}
+
+void Server::wait() {
+    if(!started_) {
+        throw server_error("server not running");
+    }
+    if(thread_.joinable()) {
+        thread_.join();
+    }
+}
+
+void Server::stop() {
+    if(!started_) {
+        throw server_error("server not running");
+    }
+
+    started_ = false;
+    thread_.join();
+    // TODO: close all open connections
 }
 
 void Server::accept_connection(int fd) {
@@ -72,6 +103,12 @@ void Server::accept_connection(int fd) {
 }
 
 void Server::drop_connection(int fd) {
+    try {
+        epoll_.remove(fd);
+    } catch (epoll_error) {
+        // Do nothing because the connection could have been dropped before
+        // it was added to epoll
+    }
     clients_.erase(fd);
     disconnected(fd);
 }

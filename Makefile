@@ -5,12 +5,12 @@ SRC_EXT = cpp
 TARGET = $(TARGET_DIR)/sqlizator
 
 CC = gcc
-CFLAGS += -g -Wall -Wextra -std=c++11
+CFLAGS += -g -Wall -Wextra -lpthread -std=c++11
 
 RM = rm -rf
 
 INC = -I $(SRC_DIR)
-LIB = -lstdc++ -lsqlite3
+LIB = -lstdc++ -lsqlite3 -lpthread
 SOURCES = $(shell find $(SRC_DIR) -type f -name *.$(SRC_EXT))
 OBJS = $(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%,$(SOURCES:.$(SRC_EXT)=.o))
 
