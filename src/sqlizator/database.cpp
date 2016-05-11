@@ -56,7 +56,6 @@ void Database::query(int cursor_id,
                      Packer* data) {
     Statement stmt(db_, query, parameters);
     bool collect_result = (operation == Operation::EXECUTE_AND_FETCH);
-    std::cout << cursor_id << " " << write_cursor_id_ << " " << stmt.sql << std::endl;
     if(write_cursor_id_ == -1) {
         if(stmt.is_readonly()) {
             stmt.execute(header, data, collect_result);
