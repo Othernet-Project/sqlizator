@@ -68,8 +68,12 @@ class DBServer: public tcpserver::Server {
     virtual void handle(int client_id, const byte_vec& input);
     virtual void disconnected(int client_id);
 
+    void process_loop();
+
  public:
     explicit DBServer(const std::string& port);
+
+    void start() override;
 };
 
 }  // namespace sqlizator

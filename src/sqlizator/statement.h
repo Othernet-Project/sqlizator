@@ -29,6 +29,10 @@ class Statement {
                        const msgpack::object_handle& parameters);
     ~Statement();
     uint64_t execute(Packer* header, Packer* data, bool collect_result);
+    bool is_begin();
+    bool is_commit();
+    bool is_rollback();
+    bool is_readonly();
 };
 
 }  // namespace sqlizator

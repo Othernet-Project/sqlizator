@@ -15,6 +15,36 @@
 #include "sqlizator/response.h"
 #include "sqlizator/statement.h"
 
+
+namespace {
+    inline void ltrim(std::string &s) {
+        s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
+    }
+
+    inline void rtrim(std::string &s) {
+        s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
+    }
+
+    inline void trim(std::string &s) {
+        ltrim(s);
+        rtrim(s);
+    }
+
+    bool icompare_predicate(char l, char r) {
+        return std::tolower(l) == std::tolower(r);
+    }
+
+    bool icompare(const std::string& l, const std::string& r) {
+        return std::equal(r.begin(), r.end(), l.begin(), icompare_predicate);
+    }
+
+    bool stmt_begins_with(sqlite3_stmt *stmt, const std::string& component) {
+        std::string sql(sqlite3_sql(stmt));
+        trim(sql);
+        return icompare(sql, component);
+    }
+}
+
 namespace sqlizator {
 
 int Statement::bind_param(const msgpack::object& v, int pos) {
@@ -172,6 +202,22 @@ uint64_t Statement::execute(Packer* header, Packer* data, bool collect_result) {
             throw sqlite_error(sqlite3_errstr(ret), sqlite3_errmsg(db_));
         }
     }
+}
+
+bool Statement::is_begin() {
+    return stmt_begins_with(statement_, "BEGIN");
+}
+
+bool Statement::is_readonly() {
+    return sqlite3_stmt_readonly(statement_) && !is_begin() && !is_commit() && !is_rollback();
+}
+
+bool Statement::is_commit() {
+    return stmt_begins_with(statement_, "COMMIT");
+}
+
+bool Statement::is_rollback() {
+    return stmt_begins_with(statement_, "ROLLBACK");
 }
 
 }  // namespace sqlizator

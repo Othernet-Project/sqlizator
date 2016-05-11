@@ -7,6 +7,8 @@
 #include <sqlite3.h>
 #include <msgpack.hpp>
 
+#include <condition_variable>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -36,6 +38,9 @@ class Database {
     sqlite3* db_;
     std::string path_;
     BHData bh_data_;
+    int write_cursor_id_;
+    std::mutex write_mutex_;
+    std::condition_variable write_var_;
 
  public:
     explicit Database(const std::string& path,
@@ -45,7 +50,8 @@ class Database {
     void connect();
     void close();
     void pragma(const std::string& key, const std::string& value);
-    void query(Operation operation,
+    void query(int cursor_id,
+               Operation operation,
                const std::string& query,
                const msgpack::object_handle& parameters,
                Packer* header,

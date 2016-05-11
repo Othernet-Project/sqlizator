@@ -5,6 +5,7 @@
 #include <msgpack.hpp>
 
 #include <iostream>
+#include <chrono>
 #include <cstdio>
 #include <map>
 #include <stdexcept>
@@ -47,6 +48,15 @@ int DBServer::get_optional_arg(const StringMap& msg,
         }
     }
     return default_value;
+}
+
+void DBServer::start() {
+    Server::start();
+
+    pool_.submit(std::bind(&DBServer::process_loop, this));
+    pool_.submit(std::bind(&DBServer::process_loop, this));
+    pool_.submit(std::bind(&DBServer::process_loop, this));
+    pool_.submit(std::bind(&DBServer::process_loop, this));
 }
 
 void DBServer::endpoint_connect(int client_id,
@@ -187,7 +197,8 @@ void DBServer::endpoint_query(int client_id,
     }
     auto db = connections_.at(client_id);
     try {
-        db->query(msg.operation,
+        db->query(client_id,
+                  msg.operation,
                   msg.query,
                   msg.parameters,
                   reply_header,
@@ -226,36 +237,52 @@ DBServer::endpoint_fn DBServer::identify_endpoint(const msgpack::object& request
 }
 
 void DBServer::handle(int client_id, const byte_vec& input) {
+    // std::cout << client_id << " Unpacking" << std::endl;
     // unpack incoming data
     msgpack::unpacked result;
     std::string str_input(input.begin(), input.end());
     msgpack::unpack(result, str_input.data(), input.size());
     msgpack::object request(result.get());
-    // prepare reply object
-    msgpack::sbuffer header_buf;
-    msgpack::sbuffer data_buf;
-    Packer reply_header(&header_buf);
-    Packer reply_data(&data_buf);
-    // identify endpoint function based on request data
-    endpoint_fn endpoint;
-    try {
-        endpoint = identify_endpoint(request);
-    } catch (invalid_request& e) {
-        set_status(status_codes::INVALID_REQUEST, e.what(), "", &reply_header);
+
+    // std::cout << client_id << " Added to request queue" << std::endl;
+    request_queue_.push(ClientRequest{client_id, std::move(request)});
+}
+
+void DBServer::process_loop() {
+    while(true) {
+        ClientRequest request;
+        // std::cout << "Waiting for request" << std::endl;
+        request_queue_.wait_pop(request);
+        // std::cout << "Got request" << std::endl;
+        // prepare reply object
+        msgpack::sbuffer header_buf;
+        msgpack::sbuffer data_buf;
+        Packer reply_header(&header_buf);
+        Packer reply_data(&data_buf);
+        // identify endpoint function based on request data
+        endpoint_fn endpoint;
+        try {
+            endpoint = identify_endpoint(request.request);
+        } catch (invalid_request& e) {
+            set_status(status_codes::INVALID_REQUEST, e.what(), "", &reply_header);
+        }
+        // std::cout<< "endpoint identified" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // get reply from endpoint function
+        (this->*endpoint)(request.client_id, request.request, &reply_header, &reply_data);
+        tcpserver::ClientResponse response;
+        response.client_id = request.client_id;
+        byte_vec &output = response.output;
+        // write serialized reply data into output buffer
+        output.insert(output.end(),
+                      header_buf.data(),
+                      header_buf.data() + header_buf.size());
+        output.insert(output.end(),
+                       data_buf.data(),
+                       data_buf.data() + data_buf.size());
+        // std::cout << request.client_id << " Adding response to queue";
+        response_queue_.push(std::move(response));
     }
-    // get reply from endpoint function
-    (this->*endpoint)(client_id, request, &reply_header, &reply_data);
-    tcpserver::ClientResponse response;
-    response.client_id = client_id;
-    byte_vec &output = response.output;
-    // write serialized reply data into output buffer
-    output.insert(output.end(),
-                   header_buf.data(),
-                   header_buf.data() + header_buf.size());
-    output.insert(output.end(),
-                   data_buf.data(),
-                   data_buf.data() + data_buf.size());
-    response_queue_.push(std::move(response));
 }
 
 void DBServer::disconnected(int client_id) {

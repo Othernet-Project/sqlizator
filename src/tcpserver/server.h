@@ -58,9 +58,9 @@ protected:
  public:
     explicit Server(const std::string& port);
     virtual ~Server();
-    void start();
-    void wait();
-    void stop();
+    virtual void start();
+    virtual void wait();
+    virtual void stop();
 };
 
 }  // namespace tcpserver
