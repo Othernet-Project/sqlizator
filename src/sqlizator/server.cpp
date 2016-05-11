@@ -4,6 +4,7 @@
 // file that comes with the source code, or http://www.gnu.org/licenses/gpl.txt.
 #include <msgpack.hpp>
 
+#include <iostream>
 #include <cstdio>
 #include <map>
 #include <stdexcept>
@@ -224,7 +225,7 @@ DBServer::endpoint_fn DBServer::identify_endpoint(const msgpack::object& request
     return endpoint;
 }
 
-void DBServer::handle(int client_id, const byte_vec& input, byte_vec* output) {
+void DBServer::handle(int client_id, const byte_vec& input) {
     // unpack incoming data
     msgpack::unpacked result;
     std::string str_input(input.begin(), input.end());
@@ -244,13 +245,17 @@ void DBServer::handle(int client_id, const byte_vec& input, byte_vec* output) {
     }
     // get reply from endpoint function
     (this->*endpoint)(client_id, request, &reply_header, &reply_data);
+    tcpserver::ClientResponse response;
+    response.client_id = client_id;
+    byte_vec &output = response.output;
     // write serialized reply data into output buffer
-    output->insert(output->end(),
+    output.insert(output.end(),
                    header_buf.data(),
                    header_buf.data() + header_buf.size());
-    output->insert(output->end(),
+    output.insert(output.end(),
                    data_buf.data(),
                    data_buf.data() + data_buf.size());
+    response_queue_.push(std::move(response));
 }
 
 void DBServer::disconnected(int client_id) {

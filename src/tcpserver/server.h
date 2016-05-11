@@ -8,34 +8,51 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "tcpserver/clientsocket.h"
 #include "tcpserver/commontypes.h"
 #include "tcpserver/epoll.h"
 #include "tcpserver/serversocket.h"
+#include "utils/threadpool.h"
+#include "utils/threadsafe_queue.h"
 
 namespace tcpserver {
 
 typedef std::map<int, std::unique_ptr<ClientSocket>> SocketMap;
 
+struct ClientResponse {
+    int client_id;
+    byte_vec output;
+};
+
 class Server {
  private:
+    typedef std::recursive_mutex Mutex;
+    typedef std::lock_guard<Mutex> Lock;
+
     ServerSocket socket_;
     Epoll epoll_;
     SocketMap clients_;
-    std::thread thread_;
+    Mutex clients_mutex_;
+
     volatile bool started_;
 
-    void run();
     void accept_connection(int fd);
     void drop_connection(int fd);
-    void receive_data(int fd);
-    virtual void handle(int client_id,
-                        const byte_vec& input,
-                        byte_vec* output) = 0;
+    void read_request(int fd);
+    void write_response(int fd, const byte_vec& response);
+
+    void request_loop();
+    void response_loop();
+
+protected:
+    utils::ThreadPool pool_;
+    utils::ThreadsafeQueue<ClientResponse> response_queue_;
+
+    virtual void handle(int client_id, const byte_vec& input) = 0;
     virtual void disconnected(int client_id) = 0;
 
  public:

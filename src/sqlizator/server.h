@@ -26,6 +26,12 @@ struct MsgType {
     msgpack::object_handle parameters;
 };
 
+struct ClientRequest {
+    int client_id;
+    msgpack::object request;
+};
+
+
 class DBServer: public tcpserver::Server {
  private:
     typedef void (DBServer::*endpoint_fn)(int client_id,
@@ -35,6 +41,8 @@ class DBServer: public tcpserver::Server {
     typedef std::map<std::string, endpoint_fn> EndpointMap;
     ConnectionMap connections_;
     EndpointMap endpoints_;
+    utils::ThreadsafeQueue<ClientRequest> request_queue_;
+
 
     int get_optional_arg(const StringMap& msg,
                          const std::string& name,
@@ -57,7 +65,7 @@ class DBServer: public tcpserver::Server {
                         Packer* reply_header,
                         Packer* reply_data);
     endpoint_fn identify_endpoint(const msgpack::object& request);
-    virtual void handle(int client_id, const byte_vec& input, byte_vec* output);
+    virtual void handle(int client_id, const byte_vec& input);
     virtual void disconnected(int client_id);
 
  public:

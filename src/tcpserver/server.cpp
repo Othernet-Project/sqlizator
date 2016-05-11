@@ -15,10 +15,13 @@
 
 namespace tcpserver {
 
+const size_t SOCKET_THREAD_POOL_SIZE = 8;
+
 Server::Server(const std::string& port): socket_(port),
                                          epoll_(),
-                                         thread_(),
-                                         started_(false){}
+                                         started_(false),
+                                         pool_(SOCKET_THREAD_POOL_SIZE)
+                                         {}
 
 Server::~Server() {
     if(started_) {
@@ -31,10 +34,11 @@ void Server::start() {
         throw server_error("server already running");
     }
     started_ = true;
-    thread_ = std::thread(&Server::run, this);
+    pool_.submit(std::bind(&Server::request_loop, this));
+    pool_.submit(std::bind(&Server::response_loop, this));
 }
 
-void Server::run() {
+void Server::request_loop() {
     try {
         socket_.bind();
         socket_.listen();
@@ -58,13 +62,19 @@ void Server::run() {
     }
 }
 
+void Server::response_loop() {
+    while(started_) {
+        ClientResponse response;
+        response_queue_.wait_pop(response);
+        write_response(response.client_id, response.output);
+    }
+}
+
 void Server::wait() {
     if(!started_) {
         throw server_error("server not running");
     }
-    if(thread_.joinable()) {
-        thread_.join();
-    }
+    pool_.join();
 }
 
 void Server::stop() {
@@ -73,7 +83,7 @@ void Server::stop() {
     }
 
     started_ = false;
-    thread_.join();
+    pool_.join();
     // TODO: close all open connections
 }
 
@@ -90,19 +100,23 @@ void Server::accept_connection(int fd) {
         if (in_fd == -1)
             break;
 
-        clients_.insert(std::make_pair(in_fd, std::move(p_clientsocket)));
-        try {
-            epoll_.add(in_fd, std::bind(&Server::receive_data,
-                                        this,
-                                        std::placeholders::_1));
-        } catch (epoll_error& e) {
-            // TODO: log error
-            drop_connection(in_fd);
+        {
+            Lock lock(clients_mutex_);
+            clients_.insert(std::make_pair(in_fd, std::move(p_clientsocket)));
+            try {
+                epoll_.add(in_fd, std::bind(&Server::read_request,
+                                            this,
+                                            std::placeholders::_1));
+            } catch (epoll_error& e) {
+                // TODO: log error
+                drop_connection(in_fd);
+            }
         }
     }
 }
 
 void Server::drop_connection(int fd) {
+    Lock lock(clients_mutex_);
     try {
         epoll_.remove(fd);
     } catch (epoll_error) {
@@ -113,13 +127,16 @@ void Server::drop_connection(int fd) {
     disconnected(fd);
 }
 
-void Server::receive_data(int fd) {
+void Server::read_request(int fd) {
     ClientSocket* p_clientsocket;
-    try {
-        p_clientsocket = clients_.at(fd).get();
-    } catch (std::out_of_range& e) {
-        // TODO: log invalid client
-        return;
+    {
+        Lock lock(clients_mutex_);
+        try {
+            p_clientsocket = clients_.at(fd).get();
+        } catch (std::out_of_range& e) {
+            // TODO: log invalid client
+            return;
+        }
     }
     // socket found, read incoming data into input buffer
     byte_vec input;
@@ -136,16 +153,25 @@ void Server::receive_data(int fd) {
         drop_connection(fd);
         return;
     }
-    // process freshly read incoming data and write response into output buffer
-    byte_vec output;
-    handle(fd, input, &output);
-    // send response from output buffer back to client
+    handle(fd, input);
+}
+
+
+void Server::write_response(int fd, const byte_vec& output) {
+    ClientSocket* p_clientsocket;
+    {
+        Lock lock(clients_mutex_);
+        try {
+            p_clientsocket = clients_.at(fd).get();
+        } catch (std::out_of_range& e) {
+            // TODO: log invalid client
+            return;
+        }
+    }
     try {
         p_clientsocket->send(output);
     } catch (socket_error& e) {
-        // TODO: log error
         drop_connection(fd);
     }
 }
-
 }  // namespace tcpserver
